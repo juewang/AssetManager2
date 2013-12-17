@@ -1,0 +1,7 @@
+{
+    "AM_USERNAME": "testuser", 
+    "AM_PASSWORD": "test", 
+    "AM_DBNAME": "assetdb", 
+    "AM_SERVER_IP": "localhost", 
+    "AM_BACK_UP_DIR": "C:\\Users\\juewa_000\\Google Drive\\AssetManager\\backup"
+}
