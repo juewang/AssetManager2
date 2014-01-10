@@ -37,7 +37,7 @@ class _AssetTable(object):
     @staticmethod
     def create():
         _execute("DROP TABLE IF EXISTS {0}".format(_AssetTable.tableName))
-        _execute("CREATE TABLE `{0}`({1} INT PRIMARY KEY AUTO_INCREMENT, {2} VARCHAR(255), {3} VARCHAR(255), {4} INT, {5} VARCHAR(1023), {6} VARCHAR(255), {7} VARCHAR(50));".format(
+        _execute("CREATE TABLE `{0}`({1} INT PRIMARY KEY AUTO_INCREMENT, {2} VARCHAR(255), {3} VARCHAR(255), {4} INT, {5} VARCHAR(1023), {6} INT, {7} VARCHAR(50));".format(
                 _AssetTable.tableName,
                 _AssetTable.ID,
                 _AssetTable.sceneName,
@@ -100,6 +100,20 @@ class _UserTable(object):
                                                                      _UserTable.assetID,
                                                                      _UserTable.versionNumber,
                                                                      _UserTable.userName))
+        
+class _CategoryTable(object):
+    tableName = "Category"
+    categoryID = "ID"
+    categoryName = "CategoryName"
+    @staticmethod
+    def create():
+        _execute("DROP TABLE IF EXISTS {0}".format(_CategoryTable.tableName))
+        _execute("CREATE TABLE `{0}`({1} INT PRIMARY KEY AUTO_INCREMENT, {2} VARCHAR(255))".format(
+                                                                                                   _CategoryTable.tableName,
+                                                                                                   _CategoryTable.categoryID,
+                                                                                                   _CategoryTable.categoryName,
+                                                                                                   ))
+        
     
 def addFile(filePath, sceneName, description, category, userName):
     if not _os.path.exists(filePath):
@@ -112,15 +126,18 @@ def addFile(filePath, sceneName, description, category, userName):
         raise RuntimeError("Scene name {0} with file path {1} already exists.".format(sceneName, filePath))
     if fileType not in _FILE_TYPE_MAPPING:
         raise RuntimeError("File type does not exist, got {0}".format(fileType))
+    
+    categoryID = getCategoryID(category)
+    
     valueMapping = ((_AssetTable.filePath, filePath), 
                     (_AssetTable.versionID, 0),
                     (_AssetTable.sceneName, sceneName),
                     (_AssetTable.description, description),
-                    (_AssetTable.category, category),
+                    (_AssetTable.category, categoryID),
                     (_AssetTable.fileType, fileType))
     command = "INSERT {0} SET {1}".format(_AssetTable.tableName, ','.join(['`' + a + '`="' + str(b) + '"' for (a, b) in valueMapping]))
     _execute(command)
-    addVersion(filePath, userName)
+    return addVersion(filePath, userName)
     
 def deleteFile(filePath):
     filePath = _normalizePath(filePath)
@@ -133,12 +150,14 @@ def deleteFile(filePath):
                                (_CommentTable.tableName, _CommentTable.assetID),
                                ):
         _execute('DELETE FROM {table} WHERE `{ID}`="{fileID}"'.format(table=tableName, ID=entryID, fileID=fileID[0]))
+    backupDir = _os.path.join(_BACK_UP_DIR, str(fileID[0]))
+    _shutil.rmtree(backupDir)
 
 def addVersion(filePath, userName):
     filePath = _normalizePath(filePath)
     ID = getIDByFilePath(filePath)[0]
-    currentVersionList = _execute('SELECT `{versionNum}` FROM {versionTable} WHERE `{assetID}`="{ID}"'.format(versionNum=_VersionTable.versionNumber, versionTable=_VersionTable.tableName,
-                                                                                                             assetID=_VersionTable.assetID, ID=ID))
+    currentVersionList = _makeList(_execute('SELECT `{versionNum}` FROM {versionTable} WHERE `{assetID}`="{ID}"'.format(versionNum=_VersionTable.versionNumber, versionTable=_VersionTable.tableName,
+                                                                                                             assetID=_VersionTable.assetID, ID=ID), fetchall=True), flatten=True)
     if not currentVersionList:
         versionID = 0
     else:
@@ -197,6 +216,7 @@ def openByUser(ID, versionNumber):
     pass
 
 def getIDByFilePath(filePath):
+    filePath = _normalizePath(filePath)
     result = _execute('SELECT `{ID}` FROM {tableName} WHERE `{filePathColumn}` = "{filePath}"'.format(ID=_AssetTable.ID, tableName=_AssetTable.tableName, filePathColumn=_AssetTable.filePath, filePath=filePath),
                       fetchall=True)
     if len(result) > 1:
@@ -204,20 +224,59 @@ def getIDByFilePath(filePath):
     elif result:
         return result[0]
     
-def getCategory():
-    result = _makeList(_execute('SELECT `{category}` FROM {tableName}'.format(category=_AssetTable.category, tableName=_AssetTable.tableName)), flatten=True)
-    return set(result)
+def getCategoryList():
+    return _makeList(_execute('SELECT `{category}` FROM {tableName}'.format(category=_CategoryTable.categoryName, tableName=_CategoryTable.tableName), fetchall=True), flatten=True)
+
+def getCategoryID(category):
+    if category not in getCategoryList():
+        raise RuntimeError("Failed to find category {0}.".format(category))
+    return int(_execute('SELECT `{categoryID}` FROM {tableName} WHERE `{categoryName}`="{category}"'.format(categoryID=_CategoryTable.categoryID, 
+                                                                                                            tableName=_CategoryTable.tableName, 
+                                                                                                            categoryName=_CategoryTable.categoryName, 
+                                                                                                            category=category))[0])
+
+def addCategory(newCategory):
+    if newCategory in getCategoryList():
+        raise RuntimeError("Can not add existing category {0}.".format(newCategory))
+    _execute('INSERT {0} SET {1}'.format(_CategoryTable.tableName, '`' + _CategoryTable.categoryName + '`="' + newCategory + '"'))
     
 def renameCategory(oldName, newName):
-    _execute('UPDATE {tableName} SET `{category}`="{newName}" WHERE `{category}`="{oldName}"'.format(category=_AssetTable.category, tableName=_AssetTable.tableName, newName=newName, oldName=oldName))
+    if newName in getCategoryList():
+        raise RuntimeError("Can not rename to existing category {0}.".format(newName))
+    categoryID = getCategoryID(oldName)
+    _execute('UPDATE {tableName} SET `{category}`="{newName}" WHERE `{ID}`="{categoryID}"'.format(tableName=_CategoryTable.tableName, 
+                                                                                                  category=_CategoryTable.categoryName, 
+                                                                                                  newName=newName,
+                                                                                                  ID=_CategoryTable.categoryID, 
+                                                                                                  categoryID=categoryID))
 
+def deleteCategory(category):
+    _execute('DELETE FROM {table} WHERE `{categoryName}`="{category}"'.format(table=_CategoryTable.tableName, categoryName=_CategoryTable.categoryName, category=category))
+    
+def setFilename(fileID, newSceneName):
+    _execute('UPDATE {tableName} SET `{sceneName}`="{newSceneName}" WHERE `{ID}`="{fileID}"'.format(tableName=_AssetTable.tableName, sceneName=_AssetTable.sceneName,
+                                                                                                    newSceneName=newSceneName, ID=_AssetTable.ID, fileID=fileID))
+    
+def setFilePath(fileID, newFilePath):
+    newFilePath = _normalizePath(newFilePath)
+    _execute('UPDATE {tableName} SET `{filePath}`="{newFilePath}" WHERE `{ID}`="{fileID}"'.format(tableName=_AssetTable.tableName, filePath=_AssetTable.filePath,
+                                                                                                    newFilePath=newFilePath, ID=_AssetTable.ID, fileID=fileID))
+def getAssetUnderCategory(category):
+    categoryID = getCategoryID(category)
+    return _execute('SELECT * FROM {tableName} WHERE `{category}`="{categoryID}"'.format(tableName=_AssetTable.tableName, category=_AssetTable.category, categoryID=categoryID), fetchall=True)
+    
 def setFileCategory(fileID, newCategory):
-    _execute('UPDATE {tableName} SET `{category}`="{newCategory}" WHERE `{ID}`="{fileID}"'.format(tableName=_AssetTable.tableName, category=_AssetTable.category, newCategory=newCategory, 
+    categoryID = getCategoryID(newCategory)
+    _execute('UPDATE {tableName} SET `{category}`="{categoryID}" WHERE `{ID}`="{fileID}"'.format(tableName=_AssetTable.tableName, category=_AssetTable.category, categoryID=categoryID, 
                                                                                                   ID=_AssetTable.ID, fileID=fileID))
 
 def getFileCategory(fileID):
-    return _execute('SELECT `{category}` FROM {tableName} WHERE `{ID}`="{fileID}"'.format(category=_AssetTable.category, tableName=_AssetTable.tableName,
+    categoryID = _execute('SELECT `{category}` FROM {tableName} WHERE `{ID}`="{fileID}"'.format(category=_AssetTable.category, tableName=_AssetTable.tableName,
                                                                                         ID=_AssetTable.ID, fileID=fileID))
+    return _execute('SELECT `{categoryName}` FROM {tableName} WHERE `{ID}`="{categoryID}"'.format(categoryName=_CategoryTable.categoryName,
+                                                                                                  tableName=_CategoryTable.tableName,
+                                                                                                  ID=_CategoryTable.categoryID,
+                                                                                                  categoryID=categoryID[0]))[0]
     
 def getCurrentVersion(fileID):
     return int(_execute('SELECT `{version}` FROM {tableName} WHERE `{ID}`="{fileID}"'.format(version=_AssetTable.versionID, tableName=_AssetTable.tableName,
@@ -242,9 +301,19 @@ def getVersionFile(fileID, versionNumber):
                                                                                             versionNum=_VersionTable.versionNumber, versionNumber=versionNumber))
     return _denormalizePath(result[0])
 
+def getVersionInfo(fileID, versionNumber):
+    result = _execute('SELECT * FROM {tableName} WHERE `{assetID}`="{assetIDValue}" and `{versionNum}`="{versionNumber}"'.format(tableName=_VersionTable.tableName, 
+                                                                                            assetID=_VersionTable.assetID,
+                                                                                            assetIDValue=fileID,
+                                                                                            versionNum=_VersionTable.versionNumber,
+                                                                                            versionNumber=versionNumber))
+    return result
+
 def getFileInfo(fileID):
-    return _execute('SELECT * FROM {tableName} WHERE `{ID}`="{fileID}"'.format(tableName=_AssetTable.tableName, ID=_AssetTable.ID,
-                                                                               fileID=fileID))
+    result = list(_execute('SELECT * FROM {tableName} WHERE `{ID}`="{fileID}"'.format(tableName=_AssetTable.tableName, ID=_AssetTable.ID,
+                                                                               fileID=fileID)))
+    result[5] = getFileCategory(result[0])
+    return result
 
 def setFileDescription(fileID, description):
     _execute('UPDATE {tableName} SET `{desc}`="{description}" WHERE `{ID}`="{fileID}"'.format(tableName=_AssetTable.tableName, desc=_AssetTable.description,
@@ -253,15 +322,14 @@ def setFileDescription(fileID, description):
     
 def getCommentList(fileID):
     result = _execute('SELECT `{comment}` FROM {tableName} WHERE `{ID}`="{fileID}"'.format(comment=_CommentTable.content, tableName=_CommentTable.tableName,
-                                                                                  ID=_CommentTable.assetID, fileID=fileID))
+                                                                                  ID=_CommentTable.assetID, fileID=fileID), fetchall=True)
     return _makeList(result, flatten=True)
 
 def getCommentListByVersion(fileID, versionNumber):
-    result = _execute('SELECT `{comment}` FROM {tableName} WHERE `{ID}`="{fileID}" AND `{versionNum}`="{versionNumber}"'.format(
-                                                                                comment=_CommentTable.content, tableName=_CommentTable.tableName,
+    return _execute('SELECT * FROM {tableName} WHERE `{ID}`="{fileID}" AND `{versionNum}`="{versionNumber}"'.format(
+                                                                                tableName=_CommentTable.tableName,
                                                                                 ID=_CommentTable.assetID, fileID=fileID,
-                                                                                versionNum=_CommentTable.versionNumber, versionNumber=versionNumber))
-    return _makeList(result, flatten=True)
+                                                                                versionNum=_CommentTable.versionNumber, versionNumber=versionNumber), fetchall=True)
 
 def editComment(fileID, versionNumber, userName, newComment):
     _execute('UPDATE `{tableName}` SET `{content}`="{comment}" WHERE `{ID}`="{fileID}" AND `{versionNum}`="{versionNumber}" AND `{user}`="{username}"'.format(
@@ -285,9 +353,9 @@ def initalSetup():
     _VersionTable.create()
     _CommentTable.create()
     _UserTable.create()
+    _CategoryTable.create()
 
 def _execute(command, fetchall=False):
-    print command
     conn = _MySQLdb.connect(_IP, _USERNAME, _PASSWORD, _DBNAME)
     with conn:
         c = conn.cursor()
@@ -332,7 +400,7 @@ def _makeList(item, flatten=False):
             flattenList.append(i)
         return flattenList
     
-    elif not item:
+    elif item == None:
         return []
     else:
         return [item]
