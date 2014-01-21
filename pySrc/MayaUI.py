@@ -3,6 +3,7 @@ Created on Dec 20, 2013
 
 @author: juewang
 '''
+import datetime as _datetime
 import functools as _functools
 import pymel.core as _pmCore
 import Database as _Database
@@ -24,12 +25,14 @@ class _UiWidgetEnum(object):
     versionNumText = "versionNumText"
     descriptionTextField = "descriptionTextField"
     categoryCombox = "categoryCombox"
+    categoryMenuList = "categoryMenuList"
     manageCategoryBtn = "manageCategoryBtn"
     categoryTabLayout = "categoryTabLayout"
     
     
 class AssetManagerDialog(object):
     _window = None
+    _dockControl = None
     _winTitle = 'Asset Manager'
     _iconSize = 85
     def __init__(self):
@@ -39,17 +42,18 @@ class AssetManagerDialog(object):
         self._highlightColor = (0.5, 0.5, 0.5)
         self._defaultColor = (0.27, 0.27, 0.27)
         self._buildupWindow()
-        self._window.show()
         
     def _buildupWindow(self):
-        if isinstance(self._window, _pmCore.uitypes.Window) and self._window.exists(self._window.name()):
-            _pmCore.deleteUI(self._window, window=True)
+        if self._dockControl and self._dockControl.exists(self._winTitle):
+            _pmCore.deleteUI(self._dockControl)
         self._window = _pmCore.window(title=self._winTitle)
-        mainLayout = _pmCore.columnLayout()
+        
+        _pmCore.columnLayout()
+        self._dockControl = _pmCore.dockControl(area='right', content=self._window, label=self._winTitle)
         tabLayout = _pmCore.tabLayout()
         self._uiWidget[_UiWidgetEnum.categoryTabLayout] = tabLayout
         for category in _Database.getCategoryList():
-            childLayout = _pmCore.scrollLayout(width=300, height=200, childResizable=True)
+            childLayout = _pmCore.scrollLayout(width=300, height=300, childResizable=True)
             self._uiWidget[category] = _pmCore.gridLayout(numberOfColumns=3, cellHeight = self._iconSize, cellWidth=self._iconSize)
             for assetInfo in _Database.getAssetUnderCategory(category):
                 id, sceneName, _, versionID, _, _, _ = assetInfo
@@ -68,14 +72,13 @@ class AssetManagerDialog(object):
         _pmCore.setParent('..')
         self._uiWidget[_UiWidgetEnum.categoryCombox] = _pmCore.optionMenuGrp(label='Category: ', width=300, columnAlign2=['left', 'left'], columnWidth2=[100, 195])
         for category in _Database.getCategoryList():
-            _pmCore.menuItem(label=category)
+            self._uiWidget.setdefault(_UiWidgetEnum.categoryMenuList, []).append(_pmCore.menuItem(label=category))
         _pmCore.text(label='Description:')
         self._uiWidget[_UiWidgetEnum.descriptionTextField] = _pmCore.scrollField(width=300, height=50)
     
         _pmCore.separator(style='single', horizontal=True)
         _pmCore.gridLayout(numberOfColumns=2, cellWidth=150)
         self._uiWidget[_UiWidgetEnum.updateAssetBtn] = _pmCore.button(label='Update Asset Info', command=_pmCore.Callback(self._updateAssetClicked))
-        self._uiWidget[_UiWidgetEnum.updateVersionBtn] = _pmCore.button(label='Update Current Version')
         self._uiWidget[_UiWidgetEnum.addCommentBtn] = _pmCore.button(label='View Version & Comment', command=_pmCore.Callback(self._viewVersionListClicked))
         self._uiWidget[_UiWidgetEnum.addAssetBtn] = _pmCore.button(label='Add New Asset', command=_pmCore.Callback(self._addAssetClicked))
         self._uiWidget[_UiWidgetEnum.deleteAssetBtn] = _pmCore.button(label='Delete Asset', command=_pmCore.Callback(self._deleteAssetClicked))
@@ -83,6 +86,7 @@ class AssetManagerDialog(object):
         self._uiWidget[_UiWidgetEnum.manageCategoryBtn] = _pmCore.button(label='Manage Category', command=self._manageCategoryClicked)
         
         _pmCore.setParent('..')
+        
         
     def _addAssetButton(self, fileID, sceneName, versionID):
         thumbnailPath = _Database.getThumbnailPath(fileID, versionID)
@@ -109,8 +113,8 @@ class AssetManagerDialog(object):
         if self._currentSelectedAsset == None:
             raise RuntimeError('Nothing selected for deletion.')
         _, _, filePath, _, _, _, _ = _Database.getFileInfo(self._currentSelectedAsset)
-        _pmCore.deleteUI(self._uiWidget[_UiWidgetEnum.assetBtnList].pop(self._assetBtnName(self._currentSelectedAsset)))
         _Database.deleteFile(filePath)
+        self._refreshAssetButtonView()
     
     def _updateAssetClicked(self):
         if self._currentSelectedAsset == None:
@@ -120,11 +124,14 @@ class AssetManagerDialog(object):
         category = _pmCore.optionMenuGrp(self._uiWidget[_UiWidgetEnum.categoryCombox], query=True, value=True)
         description = _pmCore.scrollField(self._uiWidget[_UiWidgetEnum.descriptionTextField], query=True, text=True)
         _Database.setFileCategory(self._currentSelectedAsset, category)
+            
         _Database.setFileDescription(self._currentSelectedAsset, description)
         _Database.setFilename(self._currentSelectedAsset, sceneName)
         _Database.setFilePath(self._currentSelectedAsset, filePath)
         _pmCore.iconTextButton(self._uiWidget[_UiWidgetEnum.assetBtnList][self._assetBtnName(self._currentSelectedAsset)], edit=True, label=sceneName)
     
+        self._refreshAssetButtonView()
+        
     def _addVersionClicked(self):
         fileID, versionNum, thumbnailPath = _MayaFunctions.saveSceneForVersion()
         ## Update version number
@@ -135,11 +142,17 @@ class AssetManagerDialog(object):
         dialog = _AssetVersionDialog(self._currentSelectedAsset)
     
     def _refreshAssetButtonView(self):
-        pass
+        for _, button in self._uiWidget[_UiWidgetEnum.assetBtnList].iteritems():
+            _pmCore.deleteUI(button)
+        self._uiWidget[_UiWidgetEnum.assetBtnList] = {}
+        for category in _Database.getCategoryList():
+            _pmCore.setParent(self._uiWidget[category])
+            for assetInfo in _Database.getAssetUnderCategory(category):
+                id, sceneName, _, versionID, _, _, _ = assetInfo
+                self._addAssetButton(id, sceneName, versionID)
     
     # List items updates.
     def _assetSelected(self, fileID):
-        print fileID, ' selected'
         # Update background color for buttons.
         if self._currentSelectedAsset != None:
             _pmCore.iconTextButton(self._uiWidget[_UiWidgetEnum.assetBtnList][self._assetBtnName(self._currentSelectedAsset)], edit=True, backgroundColor=self._defaultColor)
@@ -151,6 +164,7 @@ class AssetManagerDialog(object):
         fileInfo = _Database.getFileInfo(fileID)
         _pmCore.textFieldGrp(self._uiWidget[_UiWidgetEnum.sceneNameTextField], edit=True, text=fileInfo[1])
         _pmCore.textFieldGrp(self._uiWidget[_UiWidgetEnum.filePathTextField], edit=True, text=fileInfo[2])
+        _pmCore.scrollField(self._uiWidget[_UiWidgetEnum.descriptionTextField], edit=True, text=fileInfo[4])
         _pmCore.optionMenuGrp(self._uiWidget[_UiWidgetEnum.categoryCombox], edit=True, value=fileInfo[5])
         
         # Update version text.
@@ -174,13 +188,26 @@ class AssetManagerDialog(object):
             childLayout = _pmCore.scrollLayout(width=300, height=200, childResizable=True)
             self._uiWidget[add] = _pmCore.gridLayout(numberOfColumns=3, cellHeight = self._iconSize, cellWidth=self._iconSize)
             _pmCore.tabLayout(self._uiWidget[_UiWidgetEnum.categoryTabLayout], tabLabel=((childLayout, add),), edit=True)
+            _pmCore.optionMenuGrp(self._uiWidget[_UiWidgetEnum.categoryCombox], edit=True)
+            self._uiWidget[_UiWidgetEnum.categoryMenuList].append(_pmCore.menuItem(label=add))
         if rename:
             tabNameList = _pmCore.tabLayout(self._uiWidget[_UiWidgetEnum.categoryTabLayout], query=True, tabLabel=True)
             childLayoutList = _pmCore.tabLayout(self._uiWidget[_UiWidgetEnum.categoryTabLayout], query=True, childArray=True)
             _pmCore.tabLayout(self._uiWidget[_UiWidgetEnum.categoryTabLayout], edit=True, tabLabel=((childLayoutList[tabNameList.index(rename[0])], rename[1])))
+            for item in self._uiWidget[_UiWidgetEnum.categoryMenuList]:
+                if _pmCore.menuItem(item, query=True, label=True) != rename[0]:
+                    continue
+                _pmCore.menuItem(item, edit=True, label=rename[1])
+                break
         if delete:
-            pass
-        ##TODO: delete tab layout.
+            tabNameList = _pmCore.tabLayout(self._uiWidget[_UiWidgetEnum.categoryTabLayout], query=True, tabLabel=True)
+            childLayoutList = _pmCore.tabLayout(self._uiWidget[_UiWidgetEnum.categoryTabLayout], query=True, childArray=True)
+            _pmCore.deleteUI(childLayoutList[tabNameList.index(delete)])
+            for item in self._uiWidget[_UiWidgetEnum.categoryMenuList]:
+                if _pmCore.menuItem(item, query=True, label=True) != delete:
+                    continue
+                _pmCore.deleteUI(item)
+                break
     
 class _NewAssetDialog(object):
     _window = None
@@ -230,7 +257,6 @@ class _NewAssetDialog(object):
         fileID = _MayaFunctions.saveScene(sceneName, directory, description, category)
         if self._addedCallback:
             self._addedCallback(fileID, category)
-        #self._updateAssetList(category, _Database.getAsset(_Database.getUuid(sceneName)))
         
     def _newAssetInfoClose(self, *arg):
         _pmCore.deleteUI(self._window)
@@ -254,8 +280,8 @@ class _AssetVersionDialog(object):
         if isinstance(self._window, _pmCore.uitypes.Window) and self._window.exists(self._window.name()):
             _pmCore.deleteUI(self._window, window=True)
         self._window = _pmCore.window(title=self._winTitle)
-        _pmCore.columnLayout()
-        _pmCore.scrollLayout(width=300, height=200, childResizable=True)
+        _pmCore.columnLayout(adjustableColumn=True)
+        _pmCore.scrollLayout(width=300, height=250, childResizable=True)
         _pmCore.gridLayout(numberOfColumns=2, cellHeight = self._iconSize, cellWidth=self._iconSize)
         for versionNum in _Database.getVersionList(self._fileID):
             versionInfo = _Database.getVersionInfo(self._fileID, versionNum)
@@ -268,15 +294,13 @@ class _AssetVersionDialog(object):
             self._uiWidget[self._versionBtnName(versionNum)] = button
         _pmCore.setParent('..')
         _pmCore.setParent('..')
-        _pmCore.rowLayout(numberOfColumns=2)
-        _pmCore.text(label="Added by user: ")
-        self._uiWidget['userLabel'] = _pmCore.text(label="")
+        _pmCore.separator(style='none', height=10)
+        _pmCore.text(label="Comments: ", align='left')
+        self._uiWidget['commentLayout'] = _pmCore.scrollLayout(width=300, height=120, childResizable=True)
         _pmCore.setParent('..')
-        _pmCore.text(label="Comments: ")
-        self._uiWidget['commentLayout'] = _pmCore.scrollLayout(width=300, height=100, childResizable=True)
-        _pmCore.setParent('..')
-        _pmCore.scrollField(width=300, height=50)
-        _pmCore.button(label='Add Comment')
+        _pmCore.separator(style='none', height=10)
+        self._uiWidget['comment'] = _pmCore.scrollField(width=300, height=80)
+        _pmCore.button(label='Add Comment', command=_pmCore.Callback(self._commentAdded))
         
     def _versionSelected(self, versionNum):
         if self._currentSelected != None:
@@ -286,14 +310,24 @@ class _AssetVersionDialog(object):
         _pmCore.setParent(self._uiWidget['commentLayout'])
         for commentInfo in _Database.getCommentListByVersion(self._fileID, versionNum):
             _, _, user, date, content = commentInfo
-            print user
-            _pmCore.text(self._uiWidget['userLabel'], edit=True, label=user)
-            _pmCore.text(label="{0} @ {1}:".format(user, date))
-            _pmCore.text(label=content, wordWrap=True)
+            _pmCore.text(label="{0} @ {1}:".format(user, date), align='left')
+            _pmCore.text(label=content, wordWrap=True, align='left')
+            _pmCore.separator(style='singleDash', height=10)
         self._currentSelected = versionNum
         
     def _versionBtnName(self, versionNum):
         return 'version_' + str(versionNum)
+    
+    def _commentAdded(self):
+        if self._currentSelected == None:
+            raise RuntimeError('Must select a version to add comment.')
+        newComment = _pmCore.scrollField(self._uiWidget['comment'], query=True, text=True)
+        userName = _os.environ.get('AM_USERNAME')
+        _Database.addComment(self._fileID, self._currentSelected, newComment, userName)
+        _pmCore.setParent(self._uiWidget['commentLayout'])
+        _pmCore.text(label="{0} @ {1}:".format(userName, _datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')), align='left')
+        _pmCore.text(label=newComment, wordWrap=True, align='left')
+        _pmCore.scrollField(self._uiWidget['comment'], edit=True, text='')
                 
 
 class _ManageCategoryDialog(object):
@@ -356,5 +390,5 @@ class _ManageCategoryDialog(object):
         _Database.deleteCategory(current)
         _pmCore.textScrollList(self._textScrollList, edit=True, removeItem=current)
         
+        self._updateCallback(None, None, current)
         
-    
