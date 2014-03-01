@@ -224,6 +224,10 @@ def getIDByFilePath(filePath):
     elif result:
         return result[0]
     
+def getFilePath(fileID):
+    result = getFileInfo(fileID)
+    return _denormalizePath(result[2])
+    
 def getCategoryList():
     return _makeList(_execute('SELECT `{category}` FROM {tableName}'.format(category=_CategoryTable.categoryName, tableName=_CategoryTable.tableName), fetchall=True), flatten=True)
 

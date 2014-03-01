@@ -35,3 +35,12 @@ def saveSceneForVersion():
     versionNum, _, thumbnailPath = _Database.addVersion(filePath, _os.environ.get('AM_USERNAME'))
     _makeThumbnail(128, 128, thumbnailPath)
     return fileID, versionNum, thumbnailPath
+
+def openScene(scenePath):
+    _pmCore.openFile(scenePath)
+
+def importScene(scenePath):
+    _pmCore.importFile(scenePath, groupReference=True, groupName=_os.path.basename(scenePath))
+
+def referenceScene(scenePath):
+    _pmCore.createReference(scenePath, namespace=_os.path.basename(scenePath))

@@ -96,11 +96,10 @@ class AssetManagerDialog(object):
         button = _pmCore.iconTextButton(buttonName, style='iconAndTextVertical', image1=thumbnailPath, label=sceneName, command=_pmCore.Callback(self._assetSelected, fileID))
         self._uiWidget.setdefault(_UiWidgetEnum.assetBtnList, {})[buttonName] = button
         _pmCore.popupMenu()  
-        _pmCore.menuItem(label='Open')
-        _pmCore.menuItem(label='Import')
-        _pmCore.menuItem(label='Reference')
-        _pmCore.menuItem(label='View Version List')
-        _pmCore.menuItem(label='View Comments')
+        _pmCore.menuItem(label='Open', command=_pmCore.Callback(_functools.partial(_MayaFunctions.openScene, _Database.getFilePath(fileID))))
+        _pmCore.menuItem(label='Import', command=_pmCore.Callback(_functools.partial(_MayaFunctions.importScene, _Database.getFilePath(fileID))))
+        _pmCore.menuItem(label='Reference', command=_pmCore.Callback(_functools.partial(_MayaFunctions.referenceScene, _Database.getFilePath(fileID))))
+        _pmCore.menuItem(label='Versions/Comments', command=_pmCore.Callback(_functools.partial(_AssetVersionDialog, fileID)))
                 
     def _assetBtnName(self, fileID):
         return 'assetBtn' + str(fileID)
@@ -185,11 +184,13 @@ class AssetManagerDialog(object):
     def _categoryUpdated(self, add=None, rename=None, delete=None):
         _pmCore.setParent(self._uiWidget[_UiWidgetEnum.categoryTabLayout])
         if add:
+            # Add a tab in main asset view.
             childLayout = _pmCore.scrollLayout(width=300, height=200, childResizable=True)
             self._uiWidget[add] = _pmCore.gridLayout(numberOfColumns=3, cellHeight = self._iconSize, cellWidth=self._iconSize)
             _pmCore.tabLayout(self._uiWidget[_UiWidgetEnum.categoryTabLayout], tabLabel=((childLayout, add),), edit=True)
-            _pmCore.optionMenuGrp(self._uiWidget[_UiWidgetEnum.categoryCombox], edit=True)
-            self._uiWidget[_UiWidgetEnum.categoryMenuList].append(_pmCore.menuItem(label=add))
+            # Add a menu item in category list. From example in Maya doc optionMenuGrp.
+            newMenuItem = _pmCore.menuItem(label=add, parent=self._uiWidget[_UiWidgetEnum.categoryCombox]+'|OptionMenu')
+            self._uiWidget[_UiWidgetEnum.categoryMenuList].append(newMenuItem)
         if rename:
             tabNameList = _pmCore.tabLayout(self._uiWidget[_UiWidgetEnum.categoryTabLayout], query=True, tabLabel=True)
             childLayoutList = _pmCore.tabLayout(self._uiWidget[_UiWidgetEnum.categoryTabLayout], query=True, childArray=True)
