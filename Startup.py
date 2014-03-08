@@ -13,7 +13,7 @@ _CONFIG_FILE_PATH = _os.path.join(_os.path.dirname(__file__), 'config.json')
 
 _SETTING_KEY = ('AM_USERNAME', 'AM_PASSWORD', 'AM_DBNAME', 'AM_SERVER_IP', 'AM_BACK_UP_DIR')
 
-def writeConfigFile():
+'''def writeConfigFile():
     setting = _collections.OrderedDict()
     setting['AM_USERNAME'] = "testuser"
     setting['AM_PASSWORD'] = "test"
@@ -21,7 +21,7 @@ def writeConfigFile():
     setting['AM_SERVER_IP'] = "localhost"
     setting['AM_BACK_UP_DIR'] = "C:\\Users\\juewa_000\\Google Drive\\AssetManager\\backup"
     with open(_CONFIG_FILE_PATH, "w") as f:
-        _json.dump(setting, f, indent=4)
+        _json.dump(setting, f, indent=4)'''
 
 def readConfigFile():
     with open(_CONFIG_FILE_PATH, "r") as f:

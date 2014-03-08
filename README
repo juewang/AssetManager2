@@ -1,0 +1,12 @@
+INSTALL
+1. Install a MySQL server on one machine, set up users that have permission to connect to the server.
+2. Open config.json file on the root of AssetManager folder, change USER, PASSWORD, DBNAME, SEVER_IP and BACK_UP_DIR for each machine.
+3. Open Maya, run this script in a Python tab in script editor.
+	import sys
+	sys.path.append(r"your asset manager script path here")
+	import Startup
+	Startup.readConfigFile()
+4. Then use this script in Maya to open up Asset Manager Dialog.
+	import pySrc.MayaUI as MayaUI
+	d = MayaUI.AssetManagerDialog()
+5. In Photoshop, open File - script - browse,  load script called AddAssetUI.jsx to open up Asset Manager dialog.
