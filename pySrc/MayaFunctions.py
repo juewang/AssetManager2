@@ -26,7 +26,7 @@ def _makeThumbnail(width, height, path):
     image = OpenMaya.MImage()
     view.readColorBuffer(image, True)
     image.resize(width, height, True)
-    image.writeToFile(path, 'bmp')
+    image.writeToFile(path, 'png')
     
 def saveSceneForVersion():
     filePath = _pmCore.sceneName()
